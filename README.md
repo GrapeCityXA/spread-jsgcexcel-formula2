@@ -38,6 +38,8 @@ workbook.open(SpreadController.class.getClassLoader().getResourceAsStream("Excel
 workbook.setEnableCalculation(false);
 
 2、之后查询获取所有的Sheet工作表个数及名称及工作表显示隐藏的状态，这个后面有用
+
+
 List<Sheet> sheetNameList = new ArrayList<Sheet>();
 for(int i=0;i<workbook.getWorksheets().getCount();i++) {
   Sheet sheet = new Sheet();
@@ -50,8 +52,12 @@ for(int i=0;i<workbook.getWorksheets().getCount();i++) {
   }
   sheetNameList.add(sheet);
 }
-复制代码
+
+
+
 3、获取activeSheet的名称和ssjson，将上述整个合并到结果中返回，这里可以将返回结果进行压缩，进一步返回大小，这样可有效加快网络请求的时间（事例中用了GZip的通用压缩工具）。
+
+
 IWorksheet activeSheet = workbook.getActiveSheet();
 String activeSheetName = activeSheet.getName();
 returnMap.put("activeSheetName", activeSheetName);
@@ -59,10 +65,14 @@ returnMap.put("activeSheetName", activeSheetName);
 String result = activeSheet.toJson();
 result = GZip.compress(result);
 returnMap.put("sheetJSON", result);
-复制代码
+
+
 
 
 4.前端SpreadJS接收到结果后，根据第二步工作表的名称及个数新建等量的工作表并改名改状态。这里完了之后可以将前端计算引擎挂起（本方案无需前端计算，但需要有前端的公式显示作为提示）。然后获取activeSheet并反序列化第三步生成的ssjson
+
+
+
 spread.setSheetCount(length);
 for(var i=0;i<length;i++){
   spread.getSheet(i).name(data.sheetNames[i].name);
@@ -79,13 +89,15 @@ var json = data.sheetJSON;
 json = ungzipString(json);
 json = JSON.parse(json);
 activeSheet.fromJSON(json);
-复制代码
+
 
 
 这样初步加载就完成了，还没有睡着的小伙伴可以继续接着向下看。
 
 
 4. 根据刚刚的设计，前端SpreadJS中，目前只有activeSheet是有货的，其余都是空的sheet。这个时候我们就需要去监听事件，通过事件驱动来进行缓式加载。这里监听了ActiveSheetChanging事件，用于在sheet切换的时机去后端获取新的activeSheet的ssjson。这里以防用户在sheet上进行修改，同时获取了脏数据，一并传给后端。最终将后端的返回结果在前端反序列化。
+
+
 spread.bind(GC.Spread.Sheets.Events.ActiveSheetChanging, function (sender, args) {
                 var oldSheet = args.oldSheet;
                 var dirtyCells = oldSheet.getDirtyCells();
@@ -110,8 +122,12 @@ spread.bind(GC.Spread.Sheets.Events.ActiveSheetChanging, function (sender, args)
   }
                     });
             });
-复制代码
+
+
+
 5.后端拿到上述信息同步到整体的workbook中，然后重新计算得到计算后的结果，在将新的activeSheet序列化成ssjson返回
+
+
 IWorksheet oldSheet = workbook.getWorksheets().get(sheetChange.getOldSheetName());
                 if(sheetChange.getDirtyCells().size()>0) {
   for(int i=0;i<sheetChange.getDirtyCells().size();i++) {
