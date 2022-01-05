@@ -1,0 +1,199 @@
+<html>
+<head>
+	<link href="lib/spread/css/gc.spread.sheets.excel2016colorful.14.1.3.css" rel="stylesheet" type="text/css" />
+    <script src="lib/jquery-1.8.2.min.js" type="text/javascript"></script>
+    <script src="lib/pako.min.js" type="text/javascript"></script>
+    <script src="lib/spread/js/gc.spread.sheets.all.14.1.3.min.js" type="text/javascript" ></script>
+    <script src="lib/spread/js/interop/gc.spread.excelio.14.1.3.min.js" type="text/javascript" ></script>
+    <script src="lib/spread/js/resources/zh/gc.spread.sheets.resources.zh.14.1.3.min.js" type="text/javascript"></script>
+    <script src="lib/FileSaver.min.js" type="text/javascript"></script>
+    <meta name="spreadjs culture" content="zh-cn" />
+</head>
+<body>
+	<h1>SpreadJS</h1>
+	<input type="button" id="calc" value="计算"/>
+	<div style="display:inline">
+		<div id="ss" style="width:100%; height:580px;border: 1px solid gray;; float:left;margin:5px"></div>
+  	</div>
+	<script>
+		window.onload = function () {
+			var spread = new GC.Spread.Sheets.Workbook(document.getElementById('ss'));
+            $.post("initWorkBook", null, function (data) {
+                if (data != null) {
+                    var length = data.sheetNames.length;
+                    spread.setSheetCount(length);
+                    for(var i=0;i<length;i++){
+                    	spread.getSheet(i).name(data.sheetNames[i].name);
+                    	if(data.sheetNames[i].visiable == false){
+                    		spread.getSheet(i).visible(false);
+                    	}
+                    	if(data.sheetNames[i].name == data.activeSheetName){
+                    		spread.setActiveSheetIndex(i);
+                    	}
+                    }
+                    spread.suspendCalcService(false);
+                    var activeSheet = spread.getActiveSheet();
+                    var json = data.sheetJSON;
+                    json = ungzipString(json);
+                    json = JSON.parse(json);
+                    activeSheet.fromJSON(json);
+                }
+            });
+            
+            document.getElementById("calc").onclick = function(){
+            	var currentSheet = spread.getActiveSheet();
+            	var spreadDirtyCells = {};
+            	for(var i=0;i<spread.getSheetCount();i++){
+            		var sheet = spread.getSheet(i);
+            		var sheetName = sheet.name();
+            		spreadDirtyCells[sheetName] = sheet.getDirtyCells();
+            		
+            	}
+            	var calc = {
+            			currentSheet:currentSheet.name(),
+                		dirtyCells:spreadDirtyCells
+                }
+            	
+            	$.ajax({
+            		url: "getCalcResult",
+            		type:"POST",
+            		data:JSON.stringify(calc),
+            		contentType: 'application/json',
+            		async:false,
+            		success: function (data) {
+            			if (data != null) {
+                            var json = ungzipString(data);
+                            json = JSON.parse(json);
+                            currentSheet.fromJSON(json);
+                        }
+            		}
+            	});
+            	
+            }
+            spread.bind(GC.Spread.Sheets.Events.ActiveSheetChanging, function (sender, args) {
+                var oldSheet = args.oldSheet;
+                var dirtyCells = oldSheet.getDirtyCells();
+                var newSheet = args.newSheet;
+                var sheetChange = {
+                		oldSheetName:oldSheet.name(),
+                		newSheetName:newSheet.name(),
+                		dirtyCells:dirtyCells	
+                }
+                $.ajax({
+            		url: "getSheet",
+            		type:"POST",
+            		data:JSON.stringify(sheetChange),
+            		contentType: 'application/json',
+            		async:false,
+            		success: function (data) {
+            			if (data != null) {
+                            var json = ungzipString(data);
+                            json = JSON.parse(json);
+                            newSheet.fromJSON(json);
+                        }
+            		}
+            	});
+            });
+            
+            /*var menuData = spread.contextMenu.menuData;
+            
+            $.each(spread.contextMenu.menuData, function (p, v) {
+            		
+            	if(v.name === "gc.spread.hideSheet"){
+            		menuData[p].command = "gc.spread.contextMenu.hideSheet";	
+            	}
+            });
+            
+            var command = {
+           		canUndo: true,
+           		execute: function (context, options, isUndo) {
+           			var Commands = GC.Spread.Sheets.Commands;
+           			if (isUndo) {
+           				Commands.undoTransaction(context, options);
+           				return true;
+           			} else {
+           				Commands.startTransaction(context, options);
+           				var sheet = context.getSheetFromName(options.sheetName);
+           				spread.commandManager().execute({cmd: "gc.spread.contextMenu.hideSheet", sheetName: options.sheetName});
+           				
+           				Commands.endTransaction(context, options);
+           				return true;
+           			}
+           		}
+            };
+            var commandManager = spread.commandManager();
+            commandManager.register("gc.spread.contextMenu.myHideSheet", command);*/
+            
+           
+            /*var sheetChange = {
+				oldSheetName:"",
+				newSheetName:"",
+        		dirtyCells:null	
+            }
+            spread.bind(GC.Spread.Sheets.Events.SheetChanged, function (sender, args) {
+                if(args.propertyName == "isSelected"){
+                	if(args.oldValue==true){
+                		var oldSheet = spread.getSheetFromName(args.sheetName);
+                		var dirtyCells = oldSheet.getDirtyCells();
+                		sheetChange.oldSheetName = args.sheetName;
+                		sheetChange.dirtyCells = dirtyCells;
+                	}
+                	if(args.newValue==true){
+                		var sheetName = args.sheetName;
+                		if(spread.getActiveSheet().name() === sheetName){
+                			sheetChange.newSheetName = sheetName;
+                    		$.ajax({
+                        		url: "getSheet",
+                        		type:"POST",
+                        		data:JSON.stringify(sheetChange),
+                        		contentType: 'application/json',
+                        		async:false,
+                        		success: function (data) {
+                        			if (data != "") {
+                                        var json = ungzipString(data);
+                                        json = JSON.parse(json);
+                                        var newSheet = spread.getSheetFromName(args.sheetName);
+                                        newSheet.fromJSON(json);
+                                    }
+                        		}
+                        	});
+                		}
+                		
+                	}
+                	
+                }
+               
+           
+		 	});*/ 
+            
+		}
+		
+		function ungzipString(str) {
+			if(!str){
+				return "";
+			}
+			try {
+				var restored = pako.ungzip(str, { to: "string" }); //解压
+				return restored;
+			} catch (err) {
+				console.log(err);
+			}
+			return "";
+		}
+
+		function gzipString(str) {
+			if(!str){
+				return "";
+			}
+			try {
+				var restored = pako.gzip(str, { to: "string" }); //压缩
+				return restored;
+			} catch (err) {
+				console.log(err);
+			}
+			return "";
+		}
+		
+	</script>
+</body>
+</html>
